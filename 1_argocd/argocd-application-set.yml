@@ -1,0 +1,51 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: "${K8S_PROJECT_NAME}"
+  namespace: argocd
+spec:
+  description: "Project for ${K8S_PROJECT_NAME}"
+  sourceRepos:
+    - "${GH_DEV_URL}"
+    - "${GH_CHART_URL}"
+  destinations:
+    - namespace: "${K8S_PROJECT_NAME}-*"
+      server: "*"
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: "${K8S_PROJECT_NAME}"
+  namespace: argocd
+spec:
+  generators:
+  - git:
+      repoURL: "${GH_DEV_URL}"
+      revision: HEAD
+      directories:
+      - path: helm-values/demo-app-py/*
+  template:
+    metadata:
+      name: "${K8S_PROJECT_NAME}-{{path.basename}}"
+      annotations:
+        kargo.akuity.io/authorized-stage: "${K8S_PROJECT_NAME}:{{path.basename}}"
+    spec:
+      project: "${K8S_PROJECT_NAME}"
+      source:
+        repoURL: "${GH_CHART_URL}"
+        targetRevision: main
+        path: thanh-demo-app-py-chart
+      destination:
+        server: "https://kubernetes.default.svc"
+        namespace: "${K8S_PROJECT_NAME}-{{path.basename}}"
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true

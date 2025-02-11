@@ -1,0 +1,15 @@
+---
+
+replicaCount: 1
+
+env:
+  STAGE_ENVIRONMENT: "DEV-ENVIRONMENT"
+  
+# image:
+#   repository: dvanthanh1992/demo-app-py
+#   pullPolicy: Always
+#   tag: "7.0.0"
+
+service:
+  type: LoadBalancer
+  port: 80

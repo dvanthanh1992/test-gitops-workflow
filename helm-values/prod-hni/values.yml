@@ -1,0 +1,15 @@
+---
+
+replicaCount: 4
+
+env:
+  STAGE_ENVIRONMENT: "HNI-PRODUCTION"
+
+# image:
+#   repository: dvanthanh1992/demo-app-py
+#   pullPolicy: Always
+#   tag: "9.0.0"
+
+service:
+  type: LoadBalancer
+  port: 80
