@@ -1,0 +1,2 @@
+# test-gitops-workflow
+Kargo
