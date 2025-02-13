@@ -13,7 +13,7 @@ spec:
     - namespace: "${K8S_PROJECT_NAME}-*"
       server: "*"
   clusterResourceWhitelist:
-    - group: ""
+    - group: "*"
       kind: Namespace
   namespaceResourceWhitelist:
     - group: "*"
@@ -29,9 +29,9 @@ spec:
   generators:
   - git:
       repoURL: "${GH_DEV_URL}"
-      revision: HEAD
+      revision: main
       directories:
-      - path: helm-values/demo-app-py/*
+      - path: helm-values/*
   template:
     metadata:
       name: "${K8S_PROJECT_NAME}-{{path.basename}}"
