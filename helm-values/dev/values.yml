@@ -6,7 +6,7 @@ env:
   STAGE_ENVIRONMENT: "DEV-ENVIRONMENT"
   
 image:
-  repository: dvanthanh1992/demo-app-py
+  repository: 192.168.145.182/kargo/demo-app
   pullPolicy: Always
   tag: "7.0.0"
 
