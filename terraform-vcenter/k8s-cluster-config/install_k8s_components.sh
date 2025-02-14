@@ -6,8 +6,20 @@ K8S_VERSION="1.29"
 CERT_MANAGER_CHART_VERSION="1.16.1"
 ARGO_CD_CHART_VERSION="7.7.3"          # APP VERSION v2.13.0
 ARGO_ROLLOUTS_CHART_VERSION="2.38.2"   # APP VERSION v1.7.2
-HARBOR_CHART_PATH="./k8s-cluster-config/harbor/"
-HARBOR_VALUES_FILE="./k8s-cluster-config/harbor_values.yaml"
+HARBOR_CHART_PATH="harbor/"
+HARBOR_VALUES_FILE="harbor_values.yaml"
+
+echo "🔧 Installing Harbor..."
+if ! helm upgrade --install harbor "$HARBOR_CHART_PATH" \
+  -n harbor \
+  -f "$HARBOR_VALUES_FILE" \
+  --create-namespace \
+  --wait; then
+    echo "❌ Harbor installation failed." >&2
+    exit 1
+fi
+echo "✅ Harbor installed successfully!"
+echo "----------------------------------------------"
 
 echo "🔧 Installing Cert-Manager..."
 if ! helm install cert-manager cert-manager \
@@ -80,17 +92,28 @@ echo "----------------------------------------------"
 echo "✅ Kargo installed successfully!"
 echo "----------------------------------------------"
 
-echo "🔧 Installing Harbor..."
-if ! helm upgrade --install harbor "$HARBOR_CHART_PATH" \
-  -n harbor \
-  -f "$HARBOR_VALUES_FILE" \
-  --create-namespace \
-  --wait; then
-    echo "❌ Harbor installation failed." >&2
-    exit 1
-fi
-
-echo "✅ Harbor installed successfully!"
-echo "----------------------------------------------"
 echo "🎉 All components installed successfully!"
+echo "----------------------------------------------"
+
+REGISTRY="192.168.145.182/kargo/demo-app"
+VERSIONS=("5.0.0" "4.0.0" "3.0.0" "2.0.0" "1.0.0")
+
+for VERSION in "${VERSIONS[@]}"; do
+    IMAGE="$REGISTRY:$VERSION"
+    
+    echo "Pushing image: $IMAGE"
+    docker push "$IMAGE"
+
+    if [ $? -eq 0 ]; then
+        echo "Successfully pushed $IMAGE"
+    else
+        echo "Failed to push $IMAGE"
+        exit 1
+    fi
+done
+
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ../1-terraform-vcenter/files/vcenter_ssh_key root@192.168.145.171 bash /root/images.sh
+
+echo "----------------------------------------------"
+echo "🎉 All images pushed successfully!"
 echo "----------------------------------------------"
