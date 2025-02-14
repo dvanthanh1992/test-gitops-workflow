@@ -1,0 +1,227 @@
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: "${K8S_PROJECT_NAME}"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: git-creds
+  namespace: "${K8S_PROJECT_NAME}"
+  labels:
+    kargo.akuity.io/cred-type: git
+stringData:
+  repoURL: "${GH_DEV_URL}"
+  username: "${GH_USER}"
+  password: "${GH_TOKEN}"
+
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: chart-creds
+  namespace: "${K8S_PROJECT_NAME}"
+  labels:
+    kargo.akuity.io/cred-type: git
+stringData:
+  repoURL: "${GH_CHART_URL}"
+  username: "${GH_USER}"
+  password: "${GH_TOKEN}"
+
+
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: "${K8S_PROJECT_NAME}"
+  namespace: "${K8S_PROJECT_NAME}"
+spec:
+  subscriptions:
+  - image:
+      repoURL: ${PRIVATE_REGISTRY}
+      imageSelectionStrategy: SemVer
+      semverConstraint: "*.*.0"
+      discoveryLimit: 5
+      strictSemvers: true
+
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: dev
+  namespace: "${K8S_PROJECT_NAME}"
+  annotations:
+    kargo.akuity.io/color: red
+spec:
+  requestedFreight:
+  - origin:
+      kind: Warehouse
+      name: "${K8S_PROJECT_NAME}"
+    sources:
+      direct: true
+  promotionTemplate:
+    spec:
+      steps:
+      - task:
+          name: promote
+
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: staging
+  namespace: "${K8S_PROJECT_NAME}"
+  annotations:
+    kargo.akuity.io/color: amber
+spec:
+  requestedFreight:
+  - origin:
+      kind: Warehouse
+      name: "${K8S_PROJECT_NAME}"
+    sources:
+      stages:
+      - dev
+  promotionTemplate:
+    spec:
+      steps:
+      - task:
+          name: promote
+
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: prod-hcm
+  namespace: "${K8S_PROJECT_NAME}"
+  annotations:
+    kargo.akuity.io/color: yellow
+spec:
+  requestedFreight:
+  - origin:
+      kind: Warehouse
+      name: "${K8S_PROJECT_NAME}"
+    sources:
+      stages:
+      - staging
+  promotionTemplate:
+    spec:
+      steps:
+      - task:
+          name: promote
+
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: prod-hni
+  namespace: "${K8S_PROJECT_NAME}"
+  annotations:
+    kargo.akuity.io/color: green
+spec:
+  requestedFreight:
+  - origin:
+      kind: Warehouse
+      name: "${K8S_PROJECT_NAME}"
+    sources:
+      stages:
+      - staging
+  promotionTemplate:
+    spec:
+      steps:
+      - task:
+          name: promote
+
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: PromotionTask
+metadata:
+  name: promote
+  namespace: "${K8S_PROJECT_NAME}"
+spec:
+  vars:
+  - name: gitFolder
+    value: ./git-repo
+
+  - name: chartFolder
+    value: ./chart-repo
+
+  - name: branch
+    value: main
+
+  steps:
+  - uses: git-clone
+    config:
+      repoURL: "${GH_DEV_URL}"
+      checkout:
+      - branch: main
+        path: ${{ vars.gitFolder }}
+
+  - uses: git-clone
+    config:
+      repoURL: "${GH_CHART_URL}"
+      checkout:
+      - branch: main
+        path: ${{ vars.chartFolder }}
+
+  - uses: yaml-update
+    as: update-values-git
+    config:
+      path: ${{ vars.gitFolder }}/helm-values/${{ ctx.stage }}/values.yml
+      updates:
+      - key: image.tag
+        value: ${{ imageFrom("${PRIVATE_REGISTRY}").Tag }}
+      - key: image.pullPolicy
+        value: IfNotPresent
+
+  - uses: copy
+    config:
+      inPath: ${{ vars.gitFolder }}/helm-values/${{ ctx.stage }}/values.yml
+      outPath: ${{ vars.chartFolder }}/thanh-demo-app-py-chart/values-${{ ctx.stage }}.yml
+
+  # Commit and push changes to the Gitops repository
+  - uses: git-commit
+    as: commit-git-repo
+    config:
+      path: ${{ vars.gitFolder }}
+      message: "Update Helm values for dev stage"
+
+  - uses: git-push
+    as: push-git-repo
+    config:
+      path: ${{ vars.gitFolder }}
+      targetBranch: main
+
+  # Commit and push changes to the Helm chart repository
+  - uses: git-commit
+    as: commit-chart-repo
+    config:
+      path: ${{ vars.chartFolder }}
+      message: "Sync Helm values with application repository"
+
+  - uses: git-push
+    as: push-chart-repo
+    config:
+      path: ${{ vars.chartFolder }}
+      targetBranch: main
+
+  - uses: argocd-update
+    as: update-chart-repo
+    config:
+      apps:
+      - name: "${K8S_PROJECT_NAME}-${{ ctx.stage }}"
+        sources:
+        - repoURL: "${GH_CHART_URL}"
+
+  - uses: argocd-update
+    as: update-git-repo
+    config:
+      apps:
+      - name: "${K8S_PROJECT_NAME}-${{ ctx.stage }}"
+        sources:
+        - repoURL: "${GH_DEV_URL}"

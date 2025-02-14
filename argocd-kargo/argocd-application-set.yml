@@ -6,18 +6,19 @@ metadata:
   namespace: argocd
 spec:
   description: "Project for ${K8S_PROJECT_NAME}"
-  sourceRepos:
-    - "${GH_DEV_URL}"
-    - "${GH_CHART_URL}"
-  destinations:
-    - namespace: "${K8S_PROJECT_NAME}-*"
-      server: "*"
   clusterResourceWhitelist:
     - group: "*"
       kind: Namespace
+  destinations:
+    - name: '*'
+      namespace: "${K8S_PROJECT_NAME}-*"
+      server: "*"
   namespaceResourceWhitelist:
     - group: "*"
       kind: "*"
+  sourceRepos:
+    - "${GH_DEV_URL}"
+    - "${GH_CHART_URL}"
 
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -39,10 +40,13 @@ spec:
         kargo.akuity.io/authorized-stage: "${K8S_PROJECT_NAME}:{{path.basename}}"
     spec:
       project: "${K8S_PROJECT_NAME}"
-      source:
-        repoURL: "${GH_CHART_URL}"
+      sources:
+      - repoURL: "${GH_CHART_URL}"
         targetRevision: main
         path: thanh-demo-app-py-chart
+        helm:
+          valueFiles:
+            - values-{{path.basename}}.yml
       destination:
         server: "https://kubernetes.default.svc"
         namespace: "${K8S_PROJECT_NAME}-{{path.basename}}"
